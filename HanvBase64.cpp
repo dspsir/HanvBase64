@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string>
 #include <vector>
+#include <memory.h>
 
 using namespace std;
 
@@ -203,6 +204,47 @@ namespace hanv
 		}
 	}
 
+	uint32_t Base64Encrypt(const uint8_t *pData, uint32_t u32DataSize, uint8_t * const pOutBuf, uint32_t &u32OutBufSize)
+	{
+		uint32_t ret = ((u32DataSize + 2) / 3) * 4;
+		//Check output buffer size
+		if(!pOutBuf || u32OutBufSize < ret) return ret;
+
+		uint8_t temp[4];
+
+		uint32_t offset = 0;
+		for (uint32_t i = 3; i <= u32DataSize; i += 3, offset += 4)
+		{
+			Base64Encrypt(pData[i - 3], pData[i - 2], pData[i - 1], temp);
+			memcpy(pOutBuf + offset, temp, 4);
+		}
+
+		uint32_t tail = u32DataSize % 3;
+		if (tail == 1)	//补两个字节
+		{
+			Base64Encrypt(pData[u32DataSize - 1], 0, 0, temp);
+			temp[2] = '=';
+			temp[3] = '=';
+			memcpy(pOutBuf + offset, temp, 4);
+#ifdef _DEBUG
+			offset += 4;
+#endif
+		}
+		else if (tail == 2)	//补一个字节
+		{
+			Base64Encrypt(pData[u32DataSize - 2], pData[u32DataSize - 1], 0, temp);
+			temp[3] = '=';
+			memcpy(pOutBuf + offset, temp, 4);
+#ifdef _DEBUG
+			offset += 4;
+#endif
+		}
+#ifdef _DEBUG
+		if(offset != ret) printf("Maybe something was wrong...");
+#endif
+		return u32OutBufSize = ret;
+	}
+
 	string Base64Encrypt(const uint8_t *pData, uint32_t u32DataSize)
 	{
 		string out = "";
@@ -262,7 +304,7 @@ namespace hanv
 		//		if(s_u8InvBase64[i] != s_u8InvBase642[i]) printf("wrong: %d %d %d", i, s_u8InvBase64[i], s_u8InvBase642[i]);
 		//	}
 
-			//printf("--- %d --- %d=>%d %d=>%d %d=>%d %d=>%d\n", sizeof(s_u8InvBase64), in0, s_u8InvBase64[in0], in1, s_u8InvBase64[in1], in2, s_u8InvBase64[in2], in3, s_u8InvBase64[in3]);
+		//printf("--- %d --- %d=>%d %d=>%d %d=>%d %d=>%d\n", sizeof(s_u8InvBase64), in0, s_u8InvBase64[in0], in1, s_u8InvBase64[in1], in2, s_u8InvBase64[in2], in3, s_u8InvBase64[in3]);
 		in0 = s_u8InvBase64[in0]; if (in0 == 0x80) return false;
 		in1 = s_u8InvBase64[in1]; if (in1 == 0x80) return false;
 		in2 = s_u8InvBase64[in2]; if (in2 == 0x80) return false;
@@ -285,12 +327,81 @@ namespace hanv
 		return true;
 	}
 
+	bool Base64Decrypt(uint8_t in0, uint8_t in1, uint8_t in2, uint8_t in3, uint8_t out[3], uint32_t &outbytes)
+	{
+		in0 = s_u8InvBase64[in0]; if (in0 == 0x80) return false;
+		in1 = s_u8InvBase64[in1]; if (in1 == 0x80) return false;
+		in2 = s_u8InvBase64[in2]; if (in2 == 0x80) return false;
+		in3 = s_u8InvBase64[in3]; if (in3 == 0x80) return false;
+
+		uint32_t n = ((in0 == 0x81) ? 1 : 0) + ((in1 == 0x81) ? 1 : 0) + ((in2 == 0x81) ? 1 : 0) + ((in3 == 0x81) ? 1 : 0);
+
+		uint32_t temp = ((uint32_t)in0 << 18) | ((uint32_t)in1 << 12) | ((uint32_t)in2 << 6) | in3;
+		in0 = temp >> 16;
+		in1 = temp >> 8;
+		in2 = temp;
+
+		if (n > 2) return false;
+		else
+		{
+			outbytes = 3 - n;
+			out[0] = in0;
+			out[1] = in1;
+			out[2] = in2;
+		}
+
+		return true;
+	}
+
+	uint32_t Base64Decrypt(const char *pData, uint32_t u32DataSize, uint8_t * const pOutBuf, uint32_t &u32OutBufSize)
+	{
+		if (u32DataSize < 4)
+		{
+#ifdef _DEBUG
+			printf("Base64 u32DataSize=%u is wrong!\n", u32DataSize);
+#endif
+			return 0;
+		}
+
+		uint32_t ret = (u32DataSize >> 2) * 3;
+		uint32_t u32DataSize2 = u32DataSize - (u32DataSize & 3);
+		if(pData[u32DataSize2 - 1] == '=') ret --;
+		if(pData[u32DataSize2 - 2] == '=') ret --;
+		if(!pData || u32OutBufSize < ret) return ret;
+
+		uint32_t offset = 0;
+		uint32_t bytes = 0;
+		uint8_t temp[3];
+		for (uint32_t i = 4; i <= u32DataSize; i += 4)
+		{
+			bool ret = Base64Decrypt(pData[i - 4], pData[i - 3], pData[i - 2], pData[i - 1], temp, bytes);
+			if (!ret)
+			{
+#ifdef _DEBUG
+				printf("Base64 decrypt failed!\n");
+				printf("Base64: %s\n", pData);
+#endif
+				return 0;
+			}
+
+			if(bytes) memcpy(pOutBuf + offset, temp, bytes);
+			offset += bytes;
+		}
+#if _DEBUG
+		if(offset != ret) printf("Maybe something was wrong...\n");
+#endif
+		return u32OutBufSize = ret;
+	}
+
 	vector<uint8_t> Base64Decrypt(const char *pData, uint32_t u32DataSize)
 	{
 		vector<uint8_t> out;
 
 		if (!pData || !u32DataSize)
 		{
+#ifdef _DEBUG
+				printf("Base64 u32DataSize=%u is wrong!\n", u32DataSize);
+#endif
 			return out;
 		}
 
@@ -299,8 +410,10 @@ namespace hanv
 			bool ret = Base64Decrypt(pData[i - 4], pData[i - 3], pData[i - 2], pData[i - 1], out);
 			if (!ret)
 			{
+#ifdef _DEBUG
 				printf("Base64 decrypt failed!\n");
 				printf("Base64: %s\n", pData);
+#endif
 				out.clear();
 				return out;
 			}
@@ -315,6 +428,9 @@ namespace hanv
 
 		if (!pData || !u32DataSize)
 		{
+#ifdef _DEBUG
+				printf("Base64 u32DataSize=%u is wrong!\n", u32DataSize);
+#endif
 			return out;
 		}
 
@@ -323,8 +439,10 @@ namespace hanv
 			bool ret = Base64Decrypt(pData[i - 4], pData[i - 3], pData[i - 2], pData[i - 1], out);
 			if (!ret)
 			{
+#if _DEBUG
 				printf("Base64 decrypt failed!\n");
 				printf("Base64: %s\n", pData);
+#endif
 				out.clear();
 				return out;
 			}
@@ -335,6 +453,7 @@ namespace hanv
 }
 
 #ifdef HANV_TEST_BASE64
+#include "HanvBase64.h"
 using namespace hanv;
 int main()
 {
