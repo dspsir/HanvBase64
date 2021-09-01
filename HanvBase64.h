@@ -16,16 +16,38 @@
 #include <stdlib.h>
 #include <string>
 #include <vector>
+#include <string.h>
 
 namespace hanv
 {
 	// functions for encryption
+	/*	pOutBuf: buffer for output
+	 *	u32OutBufSize: Before encryption, it's the bytes of buffer pointed by pOutBuf. After
+	 *		encryption, its value will be the output bytes actually. if failed, its value is invalid.
+	 *		You can use this code to get the output bytes actually:
+	 *			uint32_t u32OutBufSize = 0;
+	 *			uint32_t bytes = Base64Encrypt(pData, u32DataSize, nullptr, u32OutBufSize);
+	 *	return value: the length of base64 string, if failed, it will be 0.
+	 */
+	extern uint32_t Base64Encrypt(const uint8_t *pData, uint32_t u32DataSize, uint8_t * const pOutBuf, uint32_t &u32OutBufSize);
+	/*
+	 * return value: the base64 string
+	 */
 	extern std::string Base64Encrypt(const uint8_t *pData, uint32_t u32DataSize);
 	extern std::string Base64Encrypt(const char *pData, uint32_t u32DataSize);
 	extern std::string Base64Encrypt(const std::string &data);
 	extern std::string Base64Encrypt(const std::vector<uint8_t> &data);
 
 	// functions for decryption
+	/*	pOutBuf: buffer for output
+	 *	u32OutBufSize: Before decryption, it's the bytes of buffer pointed by pOutBuf. After
+	 *		decryption, its value will be the output bytes actually. if failed, its value is invalid.
+	 *		You can use this code to get the output bytes actually:
+	 *			uint32_t u32OutBufSize = 0;
+	 *			uint32_t bytes = Base64Decrypt(pData, u32DataSize, nullptr, u32OutBufSize);
+	 *	return value: the length of base64 string, if failed, it will be 0.
+	 */
+	extern uint32_t Base64Decrypt(const char *pData, uint32_t u32DataSize, uint8_t * const pOutBuf, uint32_t &u32OutBufSize);
 	extern std::vector<uint8_t> Base64Decrypt(const char *pData, uint32_t u32DataSize);
 	extern std::string Base64Decrypt2String(const char *pData, uint32_t u32DataSize);
 }
@@ -73,6 +95,26 @@ inline void TestBase64()
 		memcpy(data.data(), ptr[i], len);
 		base64 = Base64Encrypt(data);
 		printf("* encrypted by Base64Encrypt(const std::vector<uint8_t> &): %s\n", base64.c_str());
+		test();
+
+		uint32_t u32OutBufSize = 0;
+		uint32_t bytes = Base64Encrypt((const uint8_t *)ptr[i], len, nullptr, u32OutBufSize);
+		printf("* encryption need %u bytes for output\n", bytes);
+		data.resize(bytes + 1);
+		data[bytes] = 0;
+		uint32_t outbytes = bytes;
+		bytes = Base64Encrypt((const uint8_t *)ptr[i], len, data.data(), outbytes);
+		printf("* encrypted by Base64Encrypt(const uint8_t *, uint32_t, const uint8_t *, uint32_t &);: %s\n", data.data());
+		base64 = (const char *)data.data();
+		outbytes = 0;
+		bytes = Base64Decrypt((const char *)data.data(), data.size() - 1, nullptr, outbytes);
+		printf("* decryption need %u bytes for output\n", bytes);
+		std::vector<uint8_t> outbuf;
+		outbuf.resize(bytes + 1, 0);
+		outbytes = bytes;
+		bytes = Base64Decrypt((const char *)data.data(), data.size() - 1, outbuf.data(), outbytes);
+		if (memcmp(outbuf.data(), ptr[i], bytes) || (bytes != outbytes)) printf("* Base64Decrypt failed!\n");
+		else printf("* decrypted by Base64Decrypt: %s\n", outbuf.data());
 		test();
 	}
 
